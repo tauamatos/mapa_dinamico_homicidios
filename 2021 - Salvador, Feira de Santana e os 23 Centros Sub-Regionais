@@ -1,0 +1,168 @@
+BIBLIOTECAS
+
+import folium
+import numpy as np
+import branca.colormap
+from folium.plugins import HeatMap
+import pandas as pd
+import requests
+from google.colab import drive
+from folium.plugins import MiniMap
+
+# Montar o Google Drive
+drive.mount('/content/drive')
+
+DADOS DE ENTRADA
+
+geojson_arquivo = "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-29-mun.json"
+
+# Caminho para o arquivo CSV no Google Drive
+caminho_arquivo = '/content/drive/MyDrive/Colab Notebooks/Dados - tabela/dados_cvli.csv'
+
+# Carregar arquivo CSV
+dados = ([-12.113,-38.402,54.7,
+          -13.277,-43.293,39.9,
+          -14.168,-41.689,14.4,
+          -11.524   ,   -39.250 ,   33.9,
+          -12.683   ,   -39.118 ,   18.6,
+          -10.464   ,   -38.915 ,   13.0,
+          -12.193   ,   -39.034 ,   73.1,
+          -14.204   ,   -42.820 ,   13.9,
+          -14.055   ,   -39.727 ,   37.8,
+          -11.309   ,   -41.839 ,   28.4,
+          -12.499   ,   -40.262 ,   33.1,
+          -17.009   ,   -39.765 ,   32.7,
+          -15.299   ,   -40.058 ,   10.4,
+          -11.135   ,   -40.569 ,   36.0,
+          -13.878   ,   -40.146 ,   42.7,
+          -12.194   ,   -46.012 ,   47.7,
+          -9.540    ,   -38.294 ,   26.7,
+          -16.625   ,   -39.279 ,   56.3,
+          -10.796   ,   -38.548 ,   23.7,
+          -12.873   ,   -38.515 ,   45.31,
+          -13.008   ,   -39.227 ,   78.1,
+          -10.484   ,   -40.115 ,   43.3,
+          -11.666   ,   -38.994 ,   19.4,
+          -17.424   ,   -39.787 ,   63.2,
+          -13.347   ,   -39.193 ,   34.71])
+
+# Dividir os dados em listas de latitude, longitude e dados_cvli
+latitudes = dados[::3]
+longitudes = dados[1::3]
+dados_cvli = dados[2::3]
+
+# Criar DataFrame
+dados = pd.DataFrame({'Latitude': latitudes, 'Longitude': longitudes, 'Dados CVLI': dados_cvli})
+
+# Exibir DataFrame
+print(dados)
+
+MAPA
+
+mapa_ba = folium.Map ([-13.45, -41.00], zoom_start=7, tiles = None)
+
+
+
+#Adicionar o fundo branco
+folium.TileLayer(tiles = branca.utilities.image_to_url([[1,1],[1,1]]),
+                 attr = " Autor: Tauã de Matos", name = "Imagem Fundo").add_to(mapa_ba)
+
+
+#Adicionando Fronteiras dos Municipios
+
+estilo = lambda x: {"color":"gray",
+                    "fillOpacity":0.1,
+                    "weight":0.3}
+
+folium.GeoJson(geojson_arquivo, style_function = estilo,
+               name = "Municipios").add_to(mapa_ba)
+
+
+#Paleta de cores
+Dados_CVLI = [0, 0.3, 0.7, 1]
+
+colormap = branca.colormap.StepColormap (["green", "yellow", "red"], index = Dados_CVLI,
+                                         caption="Taxas de CVLI - Em 2021")
+
+colormap.scale(10,78.1).add_to(mapa_ba)
+
+dicionario_cores = {0:"green",
+                    0.3: "green",
+                    0.301: "yellow",
+                    0.7:"yellow",
+                    0.701: "yellow",
+                    1:"red"}
+
+
+
+
+#Criar mapa de calor
+HeatMap(data = dados,
+        gradient = dicionario_cores,
+        min_opacity=0.1,
+        radius = 40,
+        blur = 8).add_to(mapa_ba)
+
+# Definindo a malha de coordenadas
+x_min, x_max = -18.5, -8.8  # Latitudes
+y_min, y_max = -47, -36  # Longitudes
+resolucao = 0.8
+
+# Gerando os valores para a malha
+x_vals = np.arange(x_min, x_max + resolucao, resolucao)
+y_vals = np.arange(y_min, y_max + resolucao, resolucao)
+
+# Adicionando linhas horizontais para cada latitude
+for lat in x_vals:
+    folium.PolyLine([(lat, lon) for lon in y_vals], color='gray', weight=0.2).add_to(mapa_ba)
+
+# Adicionando linhas verticais para cada longitude
+for lon in y_vals:
+    folium.PolyLine([(lat, lon) for lat in x_vals], color='gray', weight=0.2).add_to(mapa_ba)
+
+# Adicionando rótulos nas bordas para latitudes e longitudes
+for lat in x_vals:
+    folium.Marker([lat, y_vals[0] - 0.1],  # Posicionamento ajustado para não sobrepor as linhas
+                  icon=folium.DivIcon(html=f'<div style="font-size: 8pt">{lat:.1f}°</div>')).add_to(mapa_ba)
+
+for lon in y_vals:
+    folium.Marker([x_vals[-1] + 0.1, lon],  # Posicionamento ajustado para não sobrepor as linhas
+                  icon=folium.DivIcon(html=f'<div style="font-size: 8pt">{lon:.1f}°</div>')).add_to(mapa_ba)
+
+# Adicionar título
+titulo = "Resumo dos Homicídios em 2021 - Salvador, Feira de Santana e os 23 Centros Sub-Regionais"
+titulo_html =  f"""<h1 align="center" style="font-family: verdana; font-size: 10px">{titulo}</h1>"""
+mapa_ba.get_root().html.add_child(folium.Element(titulo_html))
+
+#Mapa de Localização
+MiniMap (title_layer = "cartoodbpositron", position = "bottomright", toglle_display = True,
+zoom_level_fixed = 1).add_to(mapa_ba)
+
+#Controle de Camada
+folium.LayerControl (position = "topleft").add_to(mapa_ba)
+
+
+# Criando um DataFrame com os dados dos municípios
+data = {
+    'Municipio': ['Teixeira de Freitas', 'Itamaraju', 'Porto Seguro', 'Itapetinga', 'Guanambi',
+                  'Brumado', 'Ipiáu', 'Jequié', 'Valença', 'Bom Jesus da Lapa',
+                  'Santo Antônio de Jesus', 'Salvador', 'Cruz das Almas', 'Itaberaba',
+                  'Luís Eduardo Magalhães', 'Feira de Santana', 'Alagoinhas', 'Serrinha',
+                  'Conceição do Coité', 'Irecê', 'Jacobina', 'Ribeira do Pombal',
+                  'Senhor do Bonfim', 'Euclides da Cunha', 'Paulo Afonso'],
+    'Taxa de CVLI em 2021': [63, 33, 56, 10, 14, 14, 38, 43, 35, 40, 78.1, 45, 19, 33, 48, 73, 55, 19, 34, 28, 36, 24, 43, 13, 27],
+    'Longitude': [-39.787, -39.765, -39.279, -40.058, -42.820, -41.689, -39.727, -40.146, -39.193, -43.293, -39.227, -38.515, -39.118, -40.262, -46.012, -39.034, -38.402, -38.994, -39.250, -41.839, -40.569, -38.548, -40.115, -38.915, -38.294],
+    'Latitude': [-17.424, -17.009, -16.625, -15.299, -14.204, -14.168, -14.055, -13.878, -13.347, -13.277, -13.008, -12.873, -12.683, -12.499, -12.194, -12.193, -12.113, -11.666, -11.524, -11.309, -11.135, -10.796, -10.484, -10.464, -9.540]
+}
+
+df = pd.DataFrame(data)
+
+# Adicionando marcadores com nomes dos municípios diretamente no mapa existente
+for index, row in df.iterrows():
+    folium.Marker(
+        location=(row['Latitude'], row['Longitude']),
+        icon=folium.DivIcon(html=f"""<div style="font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif; color : black; font-size: 8pt">{row['Municipio']}</div>"""),
+        tooltip=f"Taxa de CVLI em 2021: {row['Taxa de CVLI em 2021']}"
+    ).add_to(mapa_ba)
+
+mapa_ba
